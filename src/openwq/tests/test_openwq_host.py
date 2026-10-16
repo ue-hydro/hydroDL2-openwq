@@ -1,4 +1,4 @@
-"""Tracer-closure test of the OpenWQ Python hydrolink (hydrodl2.openwq.host).
+"""Tracer-closure test of the OpenWQ Python hydrolink (openwq.host).
 
 Three buckets in series (SOIL -> UPPER -> LOWER -> loss) for a few basins,
 driven from Python with a conservative tracer:
@@ -10,14 +10,14 @@ driven from Python with a conservative tracer:
   the mass that entered (closure), and the compartment masses must match a
   pure-Python reference bookkeeping of the same transfers.
 
-Run:  python -m pytest tests/test_openwq_host.py -q   (or run this file)
+Run:  python -m pytest src/openwq/tests -q   (or run this file)
 """
 import tempfile
 from pathlib import Path
 
 import numpy as np
 
-from hydrodl2.openwq import host as openwq  # noqa: E402
+from openwq import host as openwq  # noqa: E402
 
 
 def toy_hydrology(nt, nb, seed=0):

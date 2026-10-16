@@ -7,9 +7,9 @@ to a few basins, with the OpenWQ coupler attached to the HBV physics model.
 The hydrology is unchanged; OpenWQ writes its HDF5 outputs in the case folder.
 
 Needs the dMG assets (1-camels.zip, 3-dhbv_1_1p.zip from the mhpi-release S3
-bucket) unpacked in --assets, the OpenWQ hydrolink module built in <repo>/openwq
-(see <repo>/openwq/README.md) and an OpenWQ case folder with openWQ_master.json
-(--case; a conservative tracer configuration is written when the folder has none).
+bucket) unpacked in --assets, the hydrolink module built in this folder (see
+README.md) and an OpenWQ case folder with openWQ_master.json (--case; a
+conservative tracer configuration is written when the folder has none).
 
 Example:
   python run_dhbv_openwq.py \
@@ -47,7 +47,7 @@ def main():
         from dmg.core.utils import import_data_sampler  # noqa: E402
     except ImportError:  # older dMG
         import_data_sampler = None
-    from hydrodl2.openwq import OpenWQHbvCoupler  # noqa: E402
+    from openwq import OpenWQHbvCoupler  # noqa: E402
 
     cfg_path = args.config or str(dmg_root / 'example' / 'conf' / 'config_dhbv_1_1p.yaml')
     assets = Path(args.assets).resolve()

@@ -39,7 +39,7 @@ then holds one record of the initial state before the first simulated day.
 
 Usage::
 
-    from hydrodl2.openwq import OpenWQHbvCoupler
+    from openwq import OpenWQHbvCoupler
     coupler = OpenWQHbvCoupler(case_dir, area_m2, start_date, basin_ids=gage_ids)
     phy_model.wq_hook = coupler        # Hbv_1_1p instance (dMG: model.model_dict[name].phy_model)
     out = phy_model(x_dict, parameters)  # or the dMG ModelHandler forward
@@ -58,10 +58,10 @@ from hydrodl2.core.calc import uh_gamma
 
 
 def import_openwq():
-    """Return the Python host side of OpenWQ (hydrodl2.openwq.host), which loads
-    the compiled hydrolink module ``openwq_py`` from ``<repo>/openwq`` (or
+    """Return the Python host side of OpenWQ (openwq.host), which loads the
+    compiled hydrolink module ``openwq_py`` from this folder (or
     ``$OPENWQ_HYDROLINK_DIR``)."""
-    from hydrodl2.openwq import host
+    from openwq import host
     return host
 
 

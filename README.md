@@ -240,27 +240,19 @@ We welcome contributions! See [CONTRIBUTING.md](https://github.com/mhpi/hydrodl2
 
 ## OpenWQ water-quality coupling (ue-hydro fork)
 
-This fork adds a forward coupling of the differentiable HBV 1.1p to the
-[OpenWQ](https://github.com/ue-hydro/openwq) water-quality model. The hydrology
-is untouched: `Hbv_1_1p` gained an optional `wq_hook` that receives the storages
-and fluxes of every daily step; `hydrodl2.openwq.OpenWQHbvCoupler` implements the
-hook and drives OpenWQ. The layout follows the other OpenWQ hosts: `openwq/` holds
-the hydrolink files (`OpenWQ_hydrolink.h/.cpp`, a pybind11 module) and the OpenWQ
-source tree is cloned in `openwq/openwq` (see `openwq/README.md` for the build).
+This fork couples the differentiable HBV 1.1p to the
+[OpenWQ](https://github.com/ue-hydro/openwq) water-quality model (forward
+coupling: the hydrology is untouched, `Hbv_1_1p` only gained an optional
+`wq_hook`). Everything lives in `src/openwq/`, laid out like every other OpenWQ
+host: the hydrolink (`OpenWQ_hydrolink.h/.cpp`, a pybind11 module), the Python
+side (`host.py`, `coupler.py`), the example runner, the tests, and the OpenWQ
+source tree cloned in `src/openwq/openwq` and built with its CMake target
+`python_openwq` (see `src/openwq/README.md`).
 
 ```python
-from hydrodl2.openwq import OpenWQHbvCoupler
+from openwq import OpenWQHbvCoupler
 coupler = OpenWQHbvCoupler(case_dir, area_m2, start_date, basin_ids=gage_ids)
 phy_model.wq_hook = coupler          # dMG: model.model_dict['Hbv_1_1p'].phy_model
 out = model(dataset_sample, eval=True)
 coupler.stream_conc                  # outlet concentration [time, basin] (mg/L)
 ```
-
-* `example/openwq/run_dhbv_openwq.py`: the dMG `example_dhbv_1_1p` set-up (pretrained
-  δHBV 1.1p, CAMELS 531, sim mode) on a few basins with OpenWQ attached.
-* `tests/test_openwq_host.py`: tracer closure of the hydrolink on a bucket chain.
-* `tests/test_openwq_coupler.py`: the hook leaves every HBV output identical, the
-  shift-register routing of the coupler reproduces the gamma unit hydrograph, and a
-  conservative tracer closes the mass balance (with and without routing).
-* Water-quality parameters are calibrated afterwards with the OpenWQ calibration
-  library with the hydrology fixed, as for the other OpenWQ hosts.

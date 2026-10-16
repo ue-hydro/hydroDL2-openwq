@@ -65,7 +65,7 @@ version.source = "vcs"
 build.hooks.vcs.version-file = "src/hydrodl2/_version.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/hydrodl2"]
+packages = ["src/hydrodl2", "src/openwq"]
 
 [tool.hatch.metadata]
 allow-direct-references = true

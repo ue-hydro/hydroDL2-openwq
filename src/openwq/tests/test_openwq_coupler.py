@@ -1,7 +1,7 @@
 """Tests of the OpenWQ coupling of the differentiable HBV (Hbv_1_1p).
 
-Needs the OpenWQ hydrolink module built in <repo>/openwq (CMake target
-python_openwq of <repo>/openwq/openwq, see <repo>/openwq/README.md).
+Needs the hydrolink module built in src/openwq (CMake target python_openwq of
+the OpenWQ clone in src/openwq/openwq, see src/openwq/README.md).
 
 1. the hook does not change the hydrology (every output identical with and
    without the hook),
@@ -10,7 +10,7 @@ python_openwq of <repo>/openwq/openwq, see <repo>/openwq/README.md).
 3. a conservative tracer entering with precipitation closes the mass balance
    (entered == still inside + left through the outlet), with and without routing.
 
-Run:  python -m pytest tests/test_openwq_coupler.py -q   (or run this file)
+Run:  python -m pytest src/openwq/tests -q   (or run this file)
 """
 import datetime
 import tempfile
@@ -19,7 +19,7 @@ import numpy as np
 import torch
 
 from hydrodl2.models.hbv.hbv_1_1p import Hbv_1_1p
-from hydrodl2.openwq import OpenWQHbvCoupler
+from openwq import OpenWQHbvCoupler
 
 
 def make_model(nmul=2, routing=True):

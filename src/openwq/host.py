@@ -1,17 +1,16 @@
 """OpenWQ host side in Python.
 
 Loads the compiled hydrolink module ``openwq_py`` (built from
-``<repo>/openwq/OpenWQ_hydrolink.cpp`` with the CMake target ``python_openwq`` of
-the OpenWQ clone in ``<repo>/openwq/openwq``, see ``<repo>/openwq/README.md``) and
-adds the helpers every Python host model needs: running from the case folder, a
-calendar that advances the OpenWQ clock, and a minimal configuration writer.
+``OpenWQ_hydrolink.cpp`` of this folder with the CMake target ``python_openwq`` of
+the OpenWQ clone in ``./openwq``, see README.md) and adds the helpers every Python
+host model needs: running from the case folder, a calendar that advances the
+OpenWQ clock, and a minimal configuration writer.
 
-The module is looked up in ``$OPENWQ_HYDROLINK_DIR`` first, then in
-``<repo>/openwq`` (the hydrolink folder of this repository).
+The module is looked up in this folder (or in ``$OPENWQ_HYDROLINK_DIR``).
 
 Typical use::
 
-    from hydrodl2.openwq import host as openwq
+    import openwq
     with openwq.case_dir("/path/to/case"):          # folder with openWQ_master.json
         host = openwq.Host("openWQ_master.json")
         soil = host.add_compartment("SOIL", nx=n_basins)
@@ -31,13 +30,22 @@ from __future__ import annotations
 
 import contextlib
 import datetime as _dt
-import importlib
+import importlib.util
 import json
 import os
 import sys
 from pathlib import Path
 
-HYDROLINK_DIR = Path(__file__).resolve().parents[3] / 'openwq'   # <repo>/openwq
+HYDROLINK_DIR = Path(__file__).resolve().parent   # this folder (src/openwq)
+
+# torch must be loaded BEFORE the hydrolink module: openwq_py links Armadillo and
+# with it the system BLAS/LAPACK, and torch's bundled OpenBLAS then fails to
+# resolve its own symbols (ImportError: undefined symbol: sbgemm_) if the system
+# library was loaded first. Loading torch first makes both coexist.
+try:
+    import torch  # noqa: F401
+except ImportError:  # pragma: no cover  (hydrolink usable without torch)
+    pass
 
 
 def _load_module():
@@ -47,13 +55,16 @@ def _load_module():
         candidates.append(Path(env))
     candidates.append(HYDROLINK_DIR)
     for d in candidates:
-        if d.is_dir() and any(d.glob('openwq_py*.so')) or d.is_dir() and any(d.glob('openwq_py*.pyd')):
-            if str(d) not in sys.path:
-                sys.path.insert(0, str(d))
-            return importlib.import_module('openwq_py')
+        files = sorted(d.glob('openwq_py*.so')) + sorted(d.glob('openwq_py*.pyd')) if d.is_dir() else []
+        if files:
+            spec = importlib.util.spec_from_file_location('openwq_py', files[0])
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules['openwq_py'] = mod
+            spec.loader.exec_module(mod)
+            return mod
     raise ImportError(
-        "openwq_py module not found in %s. Build the hydrolink with the CMake target "
-        "python_openwq of <repo>/openwq/openwq (see <repo>/openwq/README.md) or set "
+        "openwq_py module not found in %s. Build it with the CMake target python_openwq "
+        "of the OpenWQ clone in src/openwq/openwq (see src/openwq/README.md), or set "
         "OPENWQ_HYDROLINK_DIR." % ' or '.join(str(c) for c in candidates))
 
 

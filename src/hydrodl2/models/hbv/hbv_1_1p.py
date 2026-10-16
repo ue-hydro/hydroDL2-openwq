@@ -60,10 +60,10 @@ class Hbv_1_1p(BasePhysicsModel):
         self.routing_state = None
         self._routing_state_cache = None
 
-        # Optional water-quality hook (e.g. hydrodl2.openwq.OpenWQHbvCoupler).
+        # Optional water-quality hook (e.g. openwq.OpenWQHbvCoupler, src/openwq).
         # When set, the hook receives the start-of-step storages and the fluxes
         # of every daily step of the main (non-warmup) physics loop. It never
-        # modifies the hydrology; see hydrodl2/openwq/coupler.py.
+        # modifies the hydrology; see src/openwq/coupler.py.
         self.wq_hook = None
 
         self.state_names = [

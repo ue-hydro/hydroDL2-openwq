@@ -168,6 +168,7 @@ archive/
 # UV lock
 uv.lock
 
-# OpenWQ hydrolink: nested OpenWQ clone and compiled module (built, not committed)
-openwq/openwq/
-openwq/openwq_py*.so
+# OpenWQ coupling (src/openwq): nested OpenWQ clone, dependency builds and compiled module
+src/openwq/openwq/
+src/openwq/_deps/
+src/openwq/openwq_py*.so
