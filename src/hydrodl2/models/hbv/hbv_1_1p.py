@@ -60,6 +60,12 @@ class Hbv_1_1p(BasePhysicsModel):
         self.routing_state = None
         self._routing_state_cache = None
 
+        # Optional water-quality hook (e.g. hydrodl2.openwq.OpenWQHbvCoupler).
+        # When set, the hook receives the start-of-step storages and the fluxes
+        # of every daily step of the main (non-warmup) physics loop. It never
+        # modifies the hydrology; see hydrodl2/openwq/coupler.py.
+        self.wq_hook = None
+
         self.state_names = [
             'SNOWPACK',  # Snowpack storage
             'MELTWATER',  # Meltwater storage
@@ -404,10 +410,17 @@ class Hbv_1_1p(BasePhysicsModel):
         capillary_sim = torch.zeros(Pm.size(), dtype=torch.float32, device=self.device)
 
         param_dict = {}
+        wq_hook = self.wq_hook if (self.wq_hook is not None and not self.initialize) else None
+        if wq_hook is not None:
+            wq_hook.begin(self, nsteps, ngrid)
         for t in range(nsteps):
             # Get dynamic parameter values per timestep.
             for key in full_param_dict.keys():
                 param_dict[key] = full_param_dict[key][t, :, :]
+            if wq_hook is not None:
+                # storages at the start of the step (tensors are reassigned,
+                # never written in place, so these references stay valid)
+                wq_state0 = (SNOWPACK, MELTWATER, SM, SUZ, SLZ)
 
             # Separate precipitation into liquid and solid components.
             PRECIP = Pm[t, :, :]
@@ -486,6 +499,22 @@ class Hbv_1_1p(BasePhysicsModel):
             Q2 = param_dict['parK2'] * SLZ
             SLZ = SLZ - Q2
 
+            if wq_hook is not None:
+                wq_hook.step(
+                    t,
+                    {
+                        'SNOWPACK0': wq_state0[0], 'MELTWATER0': wq_state0[1],
+                        'SM0': wq_state0[2], 'SUZ0': wq_state0[3], 'SLZ0': wq_state0[4],
+                        'RAIN': RAIN, 'SNOW': SNOW, 'T': Tm[t, :, :],
+                        'FC': param_dict['parFC'],
+                        'melt': melt, 'refreezing': refreezing, 'tosoil': tosoil,
+                        'recharge': recharge, 'excess': excess, 'ETact': ETact,
+                        'capillary': capillary, 'PERC': PERC,
+                        'Q0': Q0, 'Q1': Q1, 'Q2': Q2,
+                        'SNOWPACK': SNOWPACK, 'MELTWATER': MELTWATER,
+                        'SM': SM, 'SUZ': SUZ, 'SLZ': SLZ,
+                    },
+                )
             Qsimmu[t, :, :] = Q0 + Q1 + Q2
             Q0_sim[t, :, :] = Q0
             Q1_sim[t, :, :] = Q1
@@ -588,20 +617,26 @@ class Hbv_1_1p(BasePhysicsModel):
 
         else:
             # No routing, only output the average of all model sims.
+            Qsim = Qsimavg  # (upstream: undefined without routing)
             Qs = torch.unsqueeze(Qsimavg, -1)
             Q0_rout = Q1_rout = Q2_rout = None
             self._routing_state_cache = None
 
         states = (SNOWPACK, MELTWATER, SM, SUZ, SLZ)
 
+        if wq_hook is not None:
+            wq_hook.end(self, Qs if self.routing else torch.unsqueeze(Qsimavg, -1))
+
         if self.initialize:
             # If initialize is True, only return warmed-up storages.
             return states
         else:
             # Baseflow index (BFI) calculation
+            # Without routing Q2_rout is None (upstream crash): use the unrouted Q2.
+            Q2_for_bfi = Q2_rout if Q2_rout is not None else Q2_sim.mean(-1, keepdim=True)
             BFI_sim = (
                 100
-                * (torch.sum(Q2_rout, dim=0) / (torch.sum(Qs, dim=0) + self.nearzero))[
+                * (torch.sum(Q2_for_bfi, dim=0) / (torch.sum(Qs, dim=0) + self.nearzero))[
                     :, 0
                 ]
             )
