@@ -72,6 +72,27 @@ as `OpenWQHbvCoupler` does. Water-quality parameters are calibrated afterwards
 with the OpenWQ calibration library with the hydrology fixed, as for the other
 hosts.
 
+## How the coupler mirrors the HBV water balance
+
+Every state change of the HBV 1.1p step is passed to OpenWQ: snow and rain
+(PRECIP), melt, refreezing, tosoil, recharge (the share of rain and meltwater
+that bypasses the soil store, as in HBV), excess, capillary rise, percolation,
+Q0 + Q1, Q2, the gamma unit hydrograph (a shift register of lag cells) and the
+outlet. Evapotranspiration removes water only.
+
+OpenWQ applies the transfers of a step to the solute present at the start of
+the step, so water that enters and leaves a storage within one step would carry
+no solute if the transfers were passed storage by storage (HBV often empties its
+upper zone or meltwater store within a day). The coupler therefore resolves
+HBV's within-step flow network by origin of the water (well-mixed storages,
+HBV's update order) and sends one transfer per (origin, destination), from the
+storage where the water was at the start of the step to where it ends it. No
+storage exports more than it held, so the solute follows the water exactly:
+with `audit=True` the coupler checks, per step and compartment, that the
+transfers explain every storage change (`audit_max_residual_mm`,
+`audit_max_network_mm`), and `tests/test_openwq_coupler.py` verifies that a
+uniform tracer stays exactly uniform in every cell and at the outlet.
+
 ## Tests
 
 ```bash

@@ -108,3 +108,74 @@ if __name__ == '__main__':
     test_hook_keeps_hydrology_and_routing()
     test_closure_without_routing()
     print('OK')
+
+
+# ---------------------------------------------------------------------------
+# water mirror: every HBV transfer reaches OpenWQ
+# ---------------------------------------------------------------------------
+def test_water_balance_audit():
+    """The transfers sent to OpenWQ explain every storage change of HBV
+    (start + in - out - ET == end) in all compartments, to HBV's nearzero clamps."""
+    with tempfile.TemporaryDirectory() as tmp:
+        nsteps, ngrid, nmul = 300, 3, 2
+        area_m2 = np.array([50.0, 120.0, 300.0]) * 1e6
+        x = synthetic_forcing(nsteps, ngrid, seed=3)
+        OpenWQHbvCoupler.write_tracer_config(tmp, routing=True, precip_mg_l={'TRACER': 1.0})
+        for mode in ('input', 'soil'):
+            coupler = OpenWQHbvCoupler(tmp, area_m2, datetime.datetime(1995, 10, 1),
+                                       recharge_from=mode, audit=True)
+            model = make_model(nmul, True)
+            model.wq_hook = coupler
+            with torch.no_grad():
+                model(x, random_parameters(model, nsteps, ngrid, seed=4))
+            res = coupler.audit_max_residual_mm
+            assert max(res.values()) < 1e-4, (mode, res)   # HBV clamps SM/SLZ at nearzero = 1e-5 mm (float32)
+
+
+def test_uniform_tracer_mirrors_water():
+    """Without evapotranspiration every water transfer carries solute, so a
+    tracer at the same concentration in the initial storages and in the
+    precipitation must stay at that concentration in every cell of every
+    compartment at every step: at the end of the run mass == c * water volume
+    everywhere and the outlet concentration is c on every day with flow."""
+    for seed_f, seed_p in ((5, 6), (11, 12)):
+        with tempfile.TemporaryDirectory() as tmp:
+            nsteps, ngrid, nmul, c = 250, 2, 2, 3.0
+            area_m2 = np.array([80.0, 200.0]) * 1e6
+            x = synthetic_forcing(nsteps, ngrid, seed=seed_f)
+            x['x_phy'][:, :, 2] = 0.0   # PET = 0 -> ETact = 0
+            # initial concentration c in the storages that hold water initially; the
+            # routing cells and the outlet start empty (an initial concentration there
+            # would be applied by OpenWQ when water first arrives, on top of the solute
+            # that arrives with it)
+            stores = ['SNOWPACK', 'MELTWATER', 'SOIL', 'UPPER_ZONE', 'LOWER_ZONE']
+            OpenWQHbvCoupler.write_tracer_config(tmp, routing=True, precip_mg_l={'TRACER': c},
+                                                 initial_mg_l={k: {'TRACER': c} for k in stores})
+            coupler = OpenWQHbvCoupler(tmp, area_m2, datetime.datetime(1995, 10, 1), audit=True)
+            model = make_model(nmul, True)
+            model.wq_hook = coupler
+            with torch.no_grad():
+                model(x, random_parameters(model, nsteps, ngrid, seed=seed_p))
+            assert max(coupler.audit_max_residual_mm.values()) < 1e-4
+            net = coupler.audit_max_network_mm
+            assert max(net['composition'].values()) < 1e-4, net
+            assert max(net['over_export'].values()) < 1e-4, net
+            host, f = coupler.host, coupler.f
+            end = dict(zip(['SNOWPACK', 'MELTWATER', 'SOIL', 'UPPER_ZONE', 'LOWER_ZONE'],
+                           [s.numpy().astype(np.float64) for s in model._state_cache]))
+            for name, vol_mm in end.items():
+                mass = host.mass_array(coupler.i[name], 0)[:, 0, :]
+                np.testing.assert_allclose(mass, c * vol_mm * f, rtol=1e-5, atol=c * 1e-3, err_msg=name)
+            np.testing.assert_allclose(host.mass_array(coupler.i['ROUTING'], 0)[:, 0, :], c * coupler.lag_vol,
+                                       rtol=1e-5, atol=c * 1e-3, err_msg='ROUTING')
+            np.testing.assert_allclose(host.mass_array(coupler.i['STREAM'], 0)[:, 0, 0], c * coupler.stream_vol,
+                                       rtol=1e-5, atol=c * 1e-3, err_msg='STREAM')
+            # outlet: c on every day with a meaningful flow (HBV's float32 states leave
+            # a round-off of ~1e-5 mm per step, visible only while the stream is dry)
+            flow_mm = coupler.stream_flow_m3 / coupler.f_basin[None, :]
+            ok = np.isfinite(coupler.stream_conc) & (flow_mm > 1e-3)
+            assert ok.sum() > 0.8 * ok.size
+            np.testing.assert_allclose(coupler.stream_conc[ok], c, rtol=1e-4)
+            # the mass that left the domain is c times the water that reached the outlet
+            # (the arrivals of the last step have not left yet)
+            np.testing.assert_allclose(coupler.mass_out.sum(), c * coupler.stream_flow_m3[:-1].sum(), rtol=1e-5)
